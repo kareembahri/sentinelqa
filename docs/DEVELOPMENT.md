@@ -26,10 +26,25 @@ cd $HOME\Projects\sentinelqa
    docker compose run --rm api alembic revision --autogenerate -m "initial schema"
    ```
    A new file appears in `backend/alembic/versions/`. Commit it: it is the official definition of the database schema.
-4. Start the API:
+4. Start everything:
    ```powershell
-   docker compose up -d api
+   docker compose up -d
    ```
+5. Create your admin account (you choose the password; there is no default):
+   ```powershell
+   docker compose run --rm api python -m app.cli create-admin --email you@gmail.com
+   ```
+   Use a real email domain. Special-use domains such as `.local` or `.test` are rejected by the email validator.
+
+## Trying the API in the browser (http://localhost:8000/docs)
+
+Every POST, PATCH and DELETE needs a CSRF token:
+1. Open **GET /api/auth/csrf** → *Try it out* → *Execute*. Copy the `csrf_token` value.
+2. Open **POST /api/auth/login** → *Try it out*. Paste the token into the **X-CSRF-Token** field, enter your email and password, *Execute*. The browser now holds your session cookie.
+3. **GET /api/auth/me** shows who you are. Paste the same token into X-CSRF-Token for every other POST/PATCH/DELETE.
+4. Create a target with **POST /api/targets**: `{"name": "Juice Shop", "base_url": "http://juice-shop:3000", "is_lab": true}`.
+
+The token stays valid until you log out. After logging out, get a new one from step 1.
 
 ## Everyday commands
 
@@ -45,10 +60,12 @@ cd $HOME\Projects\sentinelqa
 | Stop and **delete** the database | `docker compose down -v` |
 | Rebuild after changing requirements | `docker compose build api` |
 | Open a database shell | `docker compose exec db psql -U sentinelqa -d sentinelqa` |
+| Create another admin | `docker compose run --rm api python -m app.cli create-admin --email x@gmail.com` |
 
 Open in your browser:
 - API documentation: http://localhost:8000/docs
 - Health check: http://localhost:8000/api/health
+- OWASP Juice Shop (lab target): http://localhost:3000
 
 ## Database changes (Alembic)
 
@@ -79,4 +96,9 @@ docker compose run --rm api pip freeze | Out-File -Encoding utf8 backend/require
 | `password authentication failed` | Same as above: the database volume was created with a different password. |
 | `Permission denied` writing to `alembic/versions` | Run the command as root once: `docker compose run --rm --user root api alembic revision --autogenerate -m "initial schema"`. |
 | `Target database is not up to date` | Apply migrations: `docker compose run --rm api alembic upgrade head`. |
+| `403 CSRF token missing or invalid` | Get a token from GET /api/auth/csrf and send it in the X-CSRF-Token header. In /docs, paste it into the X-CSRF-Token field. |
+| `401 Invalid email or password` although the password is right | After 5 wrong attempts the account is locked for 15 minutes. Wait, or have another admin unlock it with PATCH /api/users/{id} `{"unlock": true}`. |
+| `429 Too many requests` | More than 5 login attempts in a minute from your computer. Wait 60 seconds. |
+| `Target host could not be resolved` for juice-shop | The juice-shop container is not running: `docker compose up -d juice-shop`. |
+| `value is not a valid email address` in create-admin | Use a normal email domain (for example gmail.com), not `.local` or `.test`. |
 | `FAILED to resolve 'db'` | The command was run outside Compose. Use `docker compose run --rm api ...` so the container joins the project network. |

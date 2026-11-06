@@ -40,6 +40,11 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def ensure_utc(value: datetime) -> datetime:
+    """SQLite returns naive datetimes; treat them as UTC so comparisons work everywhere."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 def _enum(enum_cls: type[enum.Enum], name: str) -> SAEnum:
     """Store the enum's *value* (e.g. 'admin') as a string column."""
     return SAEnum(
@@ -166,6 +171,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     failed_logins: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Copied into every session token. Increasing it (logout, role change,
+    # deactivation) instantly invalidates all of the user's existing sessions.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

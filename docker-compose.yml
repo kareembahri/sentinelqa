@@ -1,5 +1,5 @@
 # SentinelQA local stack.
-# Phase 2: PostgreSQL + API. Later phases add the worker, ZAP, Juice Shop and the dashboard.
+# Phase 2: PostgreSQL + API + OWASP Juice Shop. Later phases add the worker, ZAP and the dashboard.
 #
 # All values come from the .env file next to this one (copy .env.example to .env).
 # The ":?" syntax makes Compose stop with an error if a required value is missing,
@@ -38,6 +38,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      juice-shop:
+        condition: service_started
     # 127.0.0.1 means only this computer can open the API, not other devices on your Wi-Fi.
     ports:
       - "127.0.0.1:8000:8000"
@@ -45,6 +47,15 @@ services:
     # generates appear in your project, and code changes apply on restart.
     volumes:
       - ./backend:/app
+    restart: unless-stopped
+
+  # OWASP Juice Shop: a deliberately vulnerable web shop, used as the lab target.
+  # It is insecure ON PURPOSE, so it is published on 127.0.0.1 only and must
+  # never be exposed to a network.
+  juice-shop:
+    image: bkimminich/juice-shop:v17.1.1
+    ports:
+      - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
 volumes:
