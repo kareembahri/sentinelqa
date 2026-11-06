@@ -1,0 +1,11 @@
+[project]
+name = "sentinelqa-backend"
+version = "0.1.0"
+description = "SentinelQA API: web application security and QA testing platform"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# No cache folder inside the mounted project directory.
+addopts = "-p no:cacheprovider -ra"

@@ -1,0 +1,6 @@
+# Keep Unix line endings in the repository and working copy.
+# Files run inside Linux containers break if Windows converts them to CRLF.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary

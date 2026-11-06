@@ -1,0 +1,28 @@
+# Secrets: never commit
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node (Phase 6)
+node_modules/
+dist/
+
+# Scan output may contain sensitive data: only curated samples are committed
+/artifacts/
+/backend/artifacts/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

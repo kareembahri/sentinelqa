@@ -1,0 +1,2 @@
+# Tools used only for development and testing.
+pytest==8.3.5
