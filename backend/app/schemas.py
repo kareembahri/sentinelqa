@@ -12,7 +12,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
-from app.models import Role
+from app.models import LinkResult, Role, ScanStatus, ScanType
 
 PASSWORD_MIN_LENGTH = 12
 PASSWORD_MAX_LENGTH = 128  # long enough for passphrases, short enough to stop hashing DoS
@@ -102,3 +102,90 @@ class AuditOut(BaseModel):
     ip: str | None
     details: dict[str, Any]
     created_at: datetime
+
+
+# ---------------------------------------------------------------- scans
+
+DEFAULT_EXCLUDE_PATTERNS = ["logout", "signout", "sign-out", "delete"]
+
+ExcludePattern = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+class CrawlOptions(StrictModel):
+    """Limits for a crawl. The upper bounds are enforced server-side and cannot be raised by clients."""
+
+    max_pages: int = Field(50, ge=1, le=500, description="Pages to fetch and analyse")
+    max_depth: int = Field(3, ge=0, le=10, description="Clicks away from the start page")
+    max_duration_s: int = Field(300, ge=10, le=1800, description="Hard time limit for the whole scan")
+    timeout_s: int = Field(10, ge=1, le=30, description="Timeout for a single request")
+    delay_ms: int = Field(100, ge=0, le=5000, description="Pause between requests")
+    max_links: int = Field(500, ge=1, le=2000, description="Extra link targets to check")
+    use_robots: bool = Field(True, description="Use robots.txt and sitemaps to discover pages")
+    exclude_patterns: list[ExcludePattern] = Field(
+        default_factory=lambda: list(DEFAULT_EXCLUDE_PATTERNS),
+        max_length=20,
+        description="URLs containing any of these texts are never requested",
+    )
+
+
+class ScanCreate(StrictModel):
+    target_id: uuid.UUID
+    type: ScanType = ScanType.CRAWL
+    options: CrawlOptions = Field(default_factory=CrawlOptions)
+
+
+class ScanOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    target_id: uuid.UUID
+    started_by: uuid.UUID
+    type: ScanType
+    status: ScanStatus
+    progress_pct: int
+    config: dict[str, Any]
+    error_message: str | None
+    notes: list[str] | None
+    queued_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class ScanSummary(BaseModel):
+    pages: int
+    http_error_pages: int
+    avg_response_ms: int | None
+    max_response_ms: int | None
+    links_total: int
+    links_by_result: dict[str, int]
+    accessibility_issues: int
+
+
+class ScanDetail(ScanOut):
+    summary: ScanSummary
+
+
+class PageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    url: str
+    status_code: int | None
+    response_ms: int | None
+    depth: int
+    title: str | None
+    meta: dict[str, Any]
+    a11y_issues: list[Any]
+
+
+class LinkOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    source_url: str
+    target_url: str
+    internal: bool
+    status_code: int | None
+    redirect_chain: list[Any]
+    result: LinkResult
+    detail: str | None

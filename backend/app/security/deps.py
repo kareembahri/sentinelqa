@@ -78,7 +78,7 @@ def csrf_header_for_docs(
         str | None,
         Header(
             alias="X-CSRF-Token",
-            description="Value from GET /api/auth/csrf. Required for every POST, PATCH and DELETE.",
+            description="Filled in automatically by the /docs page. Other clients: send the value of the sqa_csrf cookie.",
         ),
     ] = None,
 ) -> None:

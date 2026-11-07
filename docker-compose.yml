@@ -1,11 +1,21 @@
 # SentinelQA local stack.
-# Phase 2: PostgreSQL + API + OWASP Juice Shop. Later phases add the worker, ZAP and the dashboard.
+# Phase 3: PostgreSQL + API + scan worker + OWASP Juice Shop. Later phases add ZAP and the dashboard.
 #
 # All values come from the .env file next to this one (copy .env.example to .env).
 # The ":?" syntax makes Compose stop with an error if a required value is missing,
 # instead of silently starting with an empty password.
 
 name: sentinelqa
+
+# Shared by the API and the worker (a YAML "anchor", reused below with *backend-environment).
+x-backend-environment: &backend-environment
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+  ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-60}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  ALLOWED_TARGET_HOSTS: ${ALLOWED_TARGET_HOSTS:-}
+  ALLOWED_PRIVATE_LAB_HOSTS: ${ALLOWED_PRIVATE_LAB_HOSTS:-}
 
 services:
   db:
@@ -27,14 +37,7 @@ services:
 
   api:
     build: ./backend
-    environment:
-      ENVIRONMENT: ${ENVIRONMENT:-development}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
-      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-60}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      ALLOWED_TARGET_HOSTS: ${ALLOWED_TARGET_HOSTS:-}
-      ALLOWED_PRIVATE_LAB_HOSTS: ${ALLOWED_PRIVATE_LAB_HOSTS:-}
+    environment: *backend-environment
     depends_on:
       db:
         condition: service_healthy
@@ -45,6 +48,28 @@ services:
       - "127.0.0.1:8000:8000"
     # Your backend folder is mounted into the container, so files that Alembic
     # generates appear in your project, and code changes apply on restart.
+    volumes:
+      - ./backend:/app
+    # "Healthy" once the API answers, which also means migrations have run.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+
+  # Runs queued scans in the background. Same code and image as the API,
+  # different command. It has no ports: nothing can connect to it.
+  worker:
+    build: ./backend
+    command: ["python", "-m", "worker.runner"]
+    environment: *backend-environment
+    depends_on:
+      api:
+        condition: service_healthy  # waits until migrations are applied
+      juice-shop:
+        condition: service_started
     volumes:
       - ./backend:/app
     restart: unless-stopped

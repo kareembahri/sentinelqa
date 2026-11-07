@@ -206,6 +206,8 @@ class Scan(Base):
     config: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict)
     progress_pct: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(String(1000))
+    # Human-readable remarks about how the scan ran, e.g. "Stopped at the page limit".
+    notes: Mapped[list[str] | None] = mapped_column(JSONType, default=list)
     queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -256,6 +258,8 @@ class Link(Base):
     status_code: Mapped[int | None] = mapped_column(Integer)
     redirect_chain: Mapped[list[Any]] = mapped_column(JSONType, default=list)
     result: Mapped[LinkResult] = mapped_column(_enum(LinkResult, "link_result"))
+    # Why the result is what it is, e.g. "HTTP 404" or "Redirect loop".
+    detail: Mapped[str | None] = mapped_column(String(300))
 
 
 class TestCase(Base):

@@ -46,6 +46,23 @@ Every POST, PATCH and DELETE needs a CSRF token:
 
 The token stays valid until you log out. After logging out, get a new one from step 1.
 
+## Running a website scan (Phase 3)
+
+The API only queues a scan; the **worker** container runs it in the background.
+
+1. In /docs, **POST /api/scans** (with X-CSRF-Token), body: `{"target_id": "<id of your Juice Shop target>"}`.
+   The response is `202 Accepted` with `"status": "queued"`. Copy the scan `id`.
+2. **GET /api/scans/{scan_id}**: repeat until `status` is `completed`. `progress_pct` and `summary` update as it runs.
+3. Results:
+   - **GET /api/scans/{scan_id}/pages**: every page with status, response time, title, metadata and accessibility issues.
+   - **GET /api/scans/{scan_id}/links?result=broken**: broken links. Other filters: `redirect_issue`, `out_of_scope`, `timeout`, `ok`.
+4. Optional limits in the body, for example `{"target_id": "...", "options": {"max_pages": 20, "max_depth": 2}}`.
+5. **POST /api/scans/{scan_id}/cancel** stops a scan; pages found so far are kept.
+
+Watch the worker: `docker compose logs -f worker`.
+
+**What the crawler can and cannot see.** It reads the HTML the server sends. Juice Shop is a single-page app: most of its screens are drawn by JavaScript in the browser, so the crawler sees the start page, its scripts and styles, and paths found in robots.txt (such as `/ftp`). Phase 4 adds a real browser (Playwright) for the JavaScript-rendered screens.
+
 ## Everyday commands
 
 | Task | Command |
@@ -53,7 +70,8 @@ The token stays valid until you log out. After logging out, get a new one from s
 | Start everything | `docker compose up -d` |
 | Status of containers | `docker compose ps` |
 | API logs (Ctrl + C to stop watching) | `docker compose logs -f api` |
-| Restart the API after editing code | `docker compose restart api` |
+| Worker logs (scans) | `docker compose logs -f worker` |
+| Restart after editing code | `docker compose restart api worker` |
 | Run the platform's tests | `docker compose run --rm api pytest` |
 | Run one test file | `docker compose run --rm api pytest tests/api/test_health.py -v` |
 | Stop everything (keeps data) | `docker compose down` |
@@ -101,4 +119,8 @@ docker compose run --rm api pip freeze | Out-File -Encoding utf8 backend/require
 | `429 Too many requests` | More than 5 login attempts in a minute from your computer. Wait 60 seconds. |
 | `Target host could not be resolved` for juice-shop | The juice-shop container is not running: `docker compose up -d juice-shop`. |
 | `value is not a valid email address` in create-admin | Use a normal email domain (for example gmail.com), not `.local` or `.test`. |
+| Scan stays `queued` forever | The worker is not running. `docker compose ps` should list `worker` as running; check `docker compose logs worker`. |
+| Scan `failed`: "Target failed the authorization check" | The target's host is no longer in ALLOWED_TARGET_HOSTS, or it now resolves to a blocked address. Check `.env` and `docker compose ps juice-shop`. |
+| `409 You already have 3 scans queued or running` | Wait for one to finish, or cancel one with POST /api/scans/{id}/cancel. |
+| Scan `failed`: "The worker stopped unexpectedly" | The worker was restarted mid-scan. Start the scan again. |
 | `FAILED to resolve 'db'` | The command was run outside Compose. Use `docker compose run --rm api ...` so the container joins the project network. |

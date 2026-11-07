@@ -4,7 +4,7 @@
 Python · FastAPI · PostgreSQL · Playwright · Pytest · OWASP ZAP · React · Docker
 
 > 🚧 **Work in progress.** Built phase by phase; see the [roadmap](docs/ROADMAP.md).
-> Current status: **Phase 2: backend foundation**.
+> Current status: **Phase 3: website scanner**.
 
 SentinelQA runs automated functional tests and security checks against web applications you are **authorized** to test, and produces evidence-backed reports. Security findings are classified as *confirmed*, *suspected* or *informational*. Scanner alerts are never reported as confirmed vulnerabilities without verification.
 

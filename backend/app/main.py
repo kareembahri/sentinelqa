@@ -5,11 +5,11 @@ import uuid
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from app import __version__
-from app.api import audit, auth, health, targets, users
+from app.api import audit, auth, health, scans, targets, users
 from app.config import get_settings
 from app.security.rate_limit import limiter, rate_limit_exceeded_handler
 from app.security.tokens import CSRF_COOKIE, CSRF_HEADER, csrf_request_valid
@@ -33,6 +33,48 @@ SECURITY_HEADERS = {
 STRICT_CSP = "default-src 'none'; frame-ancestors 'none'"
 DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/openapi.json"})
 
+# Interactive API docs (development only). Same Swagger UI as FastAPI's default,
+# plus a request interceptor that copies the CSRF cookie into the X-CSRF-Token
+# header, exactly as the dashboard will. This is safe: only pages served from
+# this origin can read the cookie, which is the whole point of the CSRF design.
+SWAGGER_UI_VERSION = "5.17.14"
+SWAGGER_PAGE = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SentinelQA API - Docs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@{SWAGGER_UI_VERSION}/swagger-ui.css">
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@{SWAGGER_UI_VERSION}/swagger-ui-bundle.js"></script>
+<script>
+function readCookie(name) {{
+  const match = document.cookie.match("(?:^|; )" + name + "=([^;]*)");
+  return match ? decodeURIComponent(match[1]) : null;
+}}
+async function csrfToken() {{
+  if (!readCookie("{CSRF_COOKIE}")) {{
+    await fetch("/api/auth/csrf", {{ credentials: "same-origin" }});
+  }}
+  return readCookie("{CSRF_COOKIE}");
+}}
+SwaggerUIBundle({{
+  url: "/openapi.json",
+  dom_id: "#swagger-ui",
+  requestInterceptor: async (request) => {{
+    const method = (request.method || "GET").toUpperCase();
+    if (!["GET", "HEAD", "OPTIONS"].includes(method)) {{
+      request.headers["{CSRF_HEADER}"] = await csrfToken();
+    }}
+    return request;
+  }},
+}});
+</script>
+</body>
+</html>
+"""
+
 # Requests that change state must carry a valid CSRF token.
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -44,7 +86,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="SentinelQA API",
         version=__version__,
-        docs_url="/docs" if show_docs else None,
+        docs_url=None,  # served below with automatic CSRF handling
         redoc_url=None,
         openapi_url="/openapi.json" if show_docs else None,
     )
@@ -94,7 +136,13 @@ def create_app() -> FastAPI:
             content={"detail": "Internal server error", "request_id": request_id},
         )
 
-    for router in (health.router, auth.router, users.router, targets.router, audit.router):
+    if show_docs:
+
+        @app.get("/docs", include_in_schema=False)
+        def swagger_docs() -> HTMLResponse:
+            return HTMLResponse(SWAGGER_PAGE)
+
+    for router in (health.router, auth.router, users.router, targets.router, scans.router, audit.router):
         app.include_router(router, prefix="/api")
     return app
 
